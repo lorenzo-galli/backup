@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dinamica Molecolare 2D - Simulazione WebAssembly & Grafici Live</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --accent-color: #38bdf8;
+            --accent-hover: #0284c7;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --warning-color: #f59e0b;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            margin: 0 0 5px 0;
+            color: var(--accent-color);
+            font-size: 24px;
+        }
+
+        p.subtitle {
+            margin: 0 0 20px 0;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .main-layout {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            width: 100%;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .visualizer-card {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            align-self: flex-start;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        canvas {
+            background-color: #020617;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .controls-panel {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: opacity 0.2s ease;
+        }
+
+        .label-val {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        input[type="range"] {
+            accent-color: var(--accent-color);
+            cursor: pointer;
+        }
+
+        input[type="range"]:disabled {
+            cursor: not-allowed;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 5px;
+        }
+
+        button {
+            width: 100%;
+            background-color: var(--accent-color);
+            color: #0f172a;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+            color: #ffffff;
+        }
+
+        button.secondary {
+            background-color: #334155;
+            color: var(--text-main);
+        }
+
+        button.secondary:hover {
+            background-color: #475569;
+        }
+
+        .stats-grid {
+            background-color: #090d16;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-family: 'JetBrains Mono', monospace, sans-serif;
+            font-size: 12px;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            color: var(--accent-color);
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .warning-badge {
+            background-color: rgba(245, 158, 11, 0.15);
+            border: 1px solid var(--warning-color);
+            color: #fcd34d;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 11px;
+            line-height: 1.4;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Dinamica Molecolare 2D (Argon)</h1>
+    <p class="subtitle">Motore C11 (Linked-Cell Method) compilato in WebAssembly - Ottimizzato 60 FPS</p>
+
+    <div class="main-layout">
+        <!-- Card 1: Griglia Simulazione Particelle -->
+        <div class="visualizer-card">
+            <div class="card-title">Griglia Particelle 2D</div>
+            <canvas id="simCanvas" width="450" height="450"></canvas>
+        </div>
+
+        <!-- Card 2: Grafici Real-Time -->
+        <div class="visualizer-card">
+            <div class="card-title">Grafici in Tempo Reale (T & E_tot)</div>
+            <canvas id="graphCanvas" width="450" height="450"></canvas>
+        </div>
+
+        <!-- Card 3: Pannello di Controllo -->
+        <div class="controls-panel">
+            <div class="card-title">Parametri Simulazione</div>
+
+            <!-- Slider Densita -->
+            <div class="control-group">
+                <div class="label-val">
+                    <span>Densità (&rho;)</span>
+                    <span id="valDensity">0.05 &#198;⁻²</span>
+                </div>
+                <input type="range" id="sliderDensity" min="0.01" max="0.14" step="0.005" value="0.05">
+            </div>
+
+            <!-- Slider Numero di Particelle N (Disabilitato in Modalita' Box Fisso) -->
+            <div class="control-group" id="groupN">
+                <div class="label-val">
+                    <span>Particelle (N)</span>
+                    <span id="valN">500 (22x22)</span>
+                </div>
+                <input type="range" id="sliderN" min="16" max="400" step="1" value="100">
+            </div>
+
+            <!-- Avviso Fisico per Densita Altissima -->
+            <div class="warning-badge" id="warningPacking">
+                ⚠️ <strong>Densità limite:</strong> La distanza tra atomi scende verso il diametro visivo (&sigma; = 3.4 &#198;).
+            </div>
+
+            <!-- Slider Temperatura -->
+            <div class="control-group">
+                <div class="label-val">
+                    <span>Temperatura Target (T)</span>
+                    <span id="valTemp">150 K</span>
+                </div>
+                <input type="range" id="sliderTemp" min="20" max="400" step="5" value="150">
+            </div>
+
+            <!-- Slider Velocita -->
+            <div class="control-group">
+                <div class="label-val">
+                    <span>Velocità Simulazione</span>
+                    <span id="valSpeed">5 step/frame</span>
+                </div>
+                <input type="range" id="sliderSpeed" min="1" max="25" step="1" value="5">
+            </div>
+
+            <div class="button-group">
+                <button id="btnViewMode" class="secondary">Vista: Box Fisso (100 Å x 100 Å)</button>
+                <button id="btnMode" class="secondary">Modo: NVT (Termostato)</button>
+                <button id="btnRestart">Riavvia Simulazione</button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-label">Step Totali</span>
+                    <span class="stat-value" id="statStep">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Lato Box (L)</span>
+                    <span class="stat-value" id="statBoxL">100 &#198;</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Temp. Istantanea</span>
+                    <span class="stat-value" id="statTemp">0 K</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Energia Totale</span>
+                    <span class="stat-value" id="statEng">0 E₀</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let simCanvas, simCtx, graphCanvas, graphCtx;
+        let sliderN, sliderDensity, sliderTemp, sliderSpeed, btnRestart, btnMode, btnViewMode, groupN, warningPacking;
+
+        let modeNVT = 1;
+        let fixedBoxView = true;
+        const FIXED_L = 100.0;
+        let currentN = 500;
+
+        let isRunning = false;
+        let isInitialized = false;
+
+        let c_initSim, c_stepSim, c_getPosPtr, c_getBoxL, c_getTemp, c_getEKin, c_getEPot, c_getETot, c_getStep;
+
+        const maxHistory = 150;
+        let historyTemp = [];
+        let historyEnergy = [];
+
+        var Module = {
+            onRuntimeInitialized: function() {
+                console.log("[WASM] WebAssembly inizializzato!");
+                setupWasmAndStart();
+            }
+        };
+
+        function setupWasmAndStart() {
+            if (isInitialized) return;
+            isInitialized = true;
+
+            c_initSim = Module.cwrap('init_simulation', 'void', ['number', 'number', 'number', 'number', 'number']);
+            c_stepSim = Module.cwrap('step_simulation', 'void', ['number']);
+            c_getPosPtr = Module.cwrap('get_positions_ptr', 'number', []);
+            c_getBoxL = Module.cwrap('get_box_length', 'number', []);
+            c_getTemp = Module.cwrap('get_temperature', 'number', []);
+            c_getEKin = Module.cwrap('get_energy_kin', 'number', []);
+            c_getEPot = Module.cwrap('get_energy_pot', 'number', []);
+            c_getETot = Module.cwrap('get_energy_tot', 'number', []);
+            c_getStep = Module.cwrap('get_step', 'number', []);
+
+            updateUIControls();
+            startSimulation();
+            isRunning = true;
+            requestAnimationFrame(loop);
+        }
+
+        function updateUIControls() {
+            if (fixedBoxView) {
+                sliderN.disabled = true;
+                groupN.style.opacity = '0.4';
+                btnViewMode.textContent = "Vista: Box Fisso (100 Å x 100 Å)";
+            } else {
+                sliderN.disabled = false;
+                groupN.style.opacity = '1.0';
+                btnViewMode.textContent = "Vista: Scala Fisica (L varia con \u03C1)";
+            }
+        }
+
+        function startSimulation() {
+            if (!c_initSim) return;
+
+            const density = parseFloat(sliderDensity.value);
+            const temp = parseFloat(sliderTemp.value);
+            const dt = 0.01;
+
+            if (fixedBoxView) {
+                let nIdeal = density * (FIXED_L * FIXED_L);
+                let side = Math.max(3, Math.round(Math.sqrt(nIdeal)));
+                currentN = side * side;
+                var effectiveDensity = currentN / (FIXED_L * FIXED_L);
+            } else {
+                let nRaw = parseInt(sliderN.value);
+                let side = Math.max(2, Math.round(Math.sqrt(nRaw)));
+                currentN = side * side;
+                var effectiveDensity = density;
+            }
+
+            if (effectiveDensity > 0.10) {
+                warningPacking.style.display = 'block';
+            } else {
+                warningPacking.style.display = 'none';
+            }
+
+            historyTemp = [];
+            historyEnergy = [];
+
+            const side = Math.round(Math.sqrt(currentN));
+            document.getElementById('valN').textContent = `${currentN} (${side}x${side})`;
+            document.getElementById('valDensity').textContent = effectiveDensity.toFixed(3) + " Å⁻²";
+            document.getElementById('valTemp').textContent = temp + " K";
+
+            c_initSim(currentN, effectiveDensity, temp, dt, modeNVT);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            simCanvas = document.getElementById('simCanvas');
+            simCtx = simCanvas.getContext('2d');
+
+            graphCanvas = document.getElementById('graphCanvas');
+            graphCtx = graphCanvas.getContext('2d');
+
+            sliderN = document.getElementById('sliderN');
+            sliderDensity = document.getElementById('sliderDensity');
+            sliderTemp = document.getElementById('sliderTemp');
+            sliderSpeed = document.getElementById('sliderSpeed');
+            btnRestart = document.getElementById('btnRestart');
+            btnMode = document.getElementById('btnMode');
+            btnViewMode = document.getElementById('btnViewMode');
+            groupN = document.getElementById('groupN');
+            warningPacking = document.getElementById('warningPacking');
+
+            sliderN.addEventListener('change', startSimulation);
+            sliderDensity.addEventListener('change', startSimulation);
+            sliderTemp.addEventListener('change', startSimulation);
+
+            sliderSpeed.addEventListener('input', () => {
+                document.getElementById('valSpeed').textContent = sliderSpeed.value + " step/frame";
+            });
+
+            btnMode.addEventListener('click', () => {
+                modeNVT = modeNVT === 1 ? 0 : 1;
+                btnMode.textContent = modeNVT === 1 ? "Modo: NVT (Termostato)" : "Modo: NVE (Energia Costante)";
+                startSimulation();
+            });
+
+            btnViewMode.addEventListener('click', () => {
+                fixedBoxView = !fixedBoxView;
+                updateUIControls();
+                startSimulation();
+            });
+
+            btnRestart.addEventListener('click', startSimulation);
+
+            if (Module.calledRun || Module.runtimeInitialized) {
+                setupWasmAndStart();
+            }
+        });
+
+        // DISENGO PARTICELLE OTTIMIZZATO AD ALTA VELOCITÀ (Batching 2D Path)
+        function drawParticles(posArray, N, L) {
+            simCtx.clearRect(0, 0, simCanvas.width, simCanvas.height);
+
+            const margin = 15;
+            const boxPx = simCanvas.width - 2 * margin;
+
+            // Bordo Box
+            simCtx.strokeStyle = '#334155';
+            simCtx.lineWidth = 2;
+            simCtx.strokeRect(margin, margin, boxPx, boxPx);
+
+            const scale = boxPx / L;
+            const rVis = Math.max(1.7 * scale, 2.5);
+
+            // BATCH RENDERING: Un'unica chiamata fill() per tutte le centinaia di particelle
+            simCtx.fillStyle = '#38bdf8';
+            simCtx.beginPath();
+
+            for (let i = 0; i < N; i++) {
+                let px = posArray[2 * i];
+                let py = posArray[2 * i + 1];
+
+                let normX = ((px % L + L) % L) / L;
+                let normY = ((py % L + L) % L) / L;
+
+                let x = margin + normX * boxPx;
+                let y = margin + normY * boxPx;
+
+                simCtx.moveTo(x + rVis, y);
+                simCtx.arc(x, y, rVis, 0, 2 * Math.PI);
+            }
+            simCtx.fill();
+        }
+
+        // DISENGO GRAFICI OTTIMIZZATO SENZA ALLOCAZIONI GARBAGE IN JS
+        function drawRealtimeCharts(targetTemp) {
+            graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+
+            const w = graphCanvas.width;
+            const h = graphCanvas.height;
+            const pad = 40;
+            const chartH = (h - 3 * pad) / 2;
+
+            // Grafo 1: Temperatura
+            graphCtx.strokeStyle = '#334155';
+            graphCtx.lineWidth = 1;
+            graphCtx.strokeRect(pad, pad, w - 2 * pad, chartH);
+
+            graphCtx.fillStyle = '#94a3b8';
+            graphCtx.font = '11px sans-serif';
+            graphCtx.fillText("Temperatura (K) vs Frame", pad, pad - 8);
+
+            const nPts = historyTemp.length;
+            if (nPts > 1) {
+                const yTarget = pad + chartH - (targetTemp / 400.0) * chartH;
+                graphCtx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+                graphCtx.setLineDash([4, 4]);
+                graphCtx.beginPath();
+                graphCtx.moveTo(pad, yTarget);
+                graphCtx.lineTo(w - pad, yTarget);
+                graphCtx.stroke();
+                graphCtx.setLineDash([]);
+
+                graphCtx.strokeStyle = '#38bdf8';
+                graphCtx.lineWidth = 2;
+                graphCtx.beginPath();
+                for (let i = 0; i < nPts; i++) {
+                    let x = pad + (i / maxHistory) * (w - 2 * pad);
+                    let val = historyTemp[i];
+                    if (val < 0) val = 0; if (val > 400) val = 400;
+                    let y = pad + chartH - (val / 400.0) * chartH;
+                    if (i === 0) graphCtx.moveTo(x, y);
+                    else graphCtx.lineTo(x, y);
+                }
+                graphCtx.stroke();
+            }
+
+            // Grafo 2: Energia Totale
+            const g2Top = 2 * pad + chartH;
+            graphCtx.strokeStyle = '#334155';
+            graphCtx.lineWidth = 1;
+            graphCtx.strokeRect(pad, g2Top, w - 2 * pad, chartH);
+
+            graphCtx.fillStyle = '#94a3b8';
+            graphCtx.fillText("Energia Totale (E₀) vs Frame", pad, g2Top - 8);
+
+            if (nPts > 1) {
+                let minE = historyEnergy[0];
+                let maxE = historyEnergy[0];
+                for (let i = 1; i < nPts; i++) {
+                    let e = historyEnergy[i];
+                    if (e < minE) minE = e;
+                    if (e > maxE) maxE = e;
+                }
+                if (maxE === minE) { minE -= 1; maxE += 1; }
+
+                graphCtx.strokeStyle = '#4ade80';
+                graphCtx.lineWidth = 2;
+                graphCtx.beginPath();
+                for (let i = 0; i < nPts; i++) {
+                    let x = pad + (i / maxHistory) * (w - 2 * pad);
+                    let norm = (historyEnergy[i] - minE) / (maxE - minE);
+                    let y = g2Top + chartH - norm * chartH;
+                    if (i === 0) graphCtx.moveTo(x, y);
+                    else graphCtx.lineTo(x, y);
+                }
+                graphCtx.stroke();
+            }
+        }
+
+        function loop() {
+            if (isRunning && c_stepSim) {
+                const stepsPerFrame = parseInt(sliderSpeed.value);
+
+                c_stepSim(stepsPerFrame);
+
+                const posPtr = c_getPosPtr();
+                const L = c_getBoxL();
+                const temp = c_getTemp();
+                const eTot = c_getETot();
+                const step = c_getStep();
+
+                if (posPtr && Module.HEAPF64) {
+                    const posArray = new Float64Array(Module.HEAPF64.buffer, posPtr, 2 * currentN);
+                    
+                    drawParticles(posArray, currentN, L);
+
+                    historyTemp.push(temp);
+                    historyEnergy.push(eTot);
+                    if (historyTemp.length > maxHistory) {
+                        historyTemp.shift();
+                        historyEnergy.shift();
+                    }
+
+                    drawRealtimeCharts(parseFloat(sliderTemp.value));
+
+                    document.getElementById('statStep').textContent = step;
+                    document.getElementById('statBoxL').textContent = L.toFixed(1) + " Å";
+                    document.getElementById('statTemp').textContent = temp.toFixed(1) + " K";
+                    document.getElementById('statEng').textContent = eTot.toFixed(1);
+                }
+            }
+
+            requestAnimationFrame(loop);
+        }
+    </script>
+
+    <script src="md_wasm.js"></script>
+</body>
+</html>
