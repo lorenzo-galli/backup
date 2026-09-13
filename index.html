@@ -41,11 +41,13 @@
 
         .main-layout {
             display: flex;
-            gap: 20px;
-            max-width: 1200px;
-            width: 100%;
-            flex-wrap: wrap;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            gap: 18px;
+            max-width: 100%;
+            width: auto;
             justify-content: center;
+            align-items: stretch;
         }
 
         .visualizer-card {
@@ -57,6 +59,8 @@
             flex-direction: column;
             align-items: center;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            flex: 0 1 auto;
+            box-sizing: border-box;
         }
 
         .card-title {
@@ -73,6 +77,10 @@
             background-color: #020617;
             border-radius: 8px;
             border: 1px solid var(--border-color);
+            width: 100%;
+            max-width: 400px;
+            height: auto;
+            aspect-ratio: 1 / 1;
         }
 
         .controls-panel {
@@ -80,11 +88,13 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 20px;
-            width: 320px;
+            width: 310px;
+            flex: 0 0 310px;
             display: flex;
             flex-direction: column;
             gap: 15px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            box-sizing: border-box;
         }
 
         .control-group {
@@ -183,6 +193,28 @@
             line-height: 1.4;
             display: none;
         }
+
+        @media (max-width: 1150px) {
+            .main-layout {
+                flex-wrap: wrap;
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .main-layout {
+                flex-direction: column;
+                align-items: center;
+                gap: 15px;
+            }
+            .visualizer-card, .controls-panel {
+                width: 100%;
+                max-width: 450px;
+                flex: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -197,9 +229,12 @@
             <canvas id="simCanvas" width="450" height="450"></canvas>
         </div>
 
-        <!-- Card 2: Grafici Real-Time -->
+        <!-- Card 2: Grafici Real-Time / g(r) -->
         <div class="visualizer-card">
-            <div class="card-title">Grafici in Tempo Reale (T & E_tot)</div>
+            <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <span id="card2Title">Grafici Live (T &amp; E_tot)</span>
+                <button id="btnToggleChart" class="secondary" style="width: auto; padding: 3px 8px; font-size: 11px; margin: 0;">Mostra g(r)</button>
+            </div>
             <canvas id="graphCanvas" width="450" height="450"></canvas>
         </div>
 
@@ -213,7 +248,7 @@
                     <span>Densità (&rho;)</span>
                     <span id="valDensity">0.05 &#198;⁻²</span>
                 </div>
-                <input type="range" id="sliderDensity" min="0.01" max="0.14" step="0.005" value="0.05">
+                <input type="range" id="sliderDensity" min="0.01" max="0.10" step="0.005" value="0.05">
             </div>
 
             <!-- Slider Numero di Particelle N (Disabilitato in Modalita' Box Fisso) -->
@@ -251,6 +286,7 @@
             <div class="button-group">
                 <button id="btnViewMode" class="secondary">Vista: Box Fisso (100 Å x 100 Å)</button>
                 <button id="btnMode" class="secondary">Modo: NVT (Termostato)</button>
+                <button id="btnCalcGR" class="secondary">Calcola g(r) (10.000 Step)</button>
                 <button id="btnRestart">Riavvia Simulazione</button>
             </div>
 
@@ -268,7 +304,7 @@
                     <span class="stat-value" id="statTemp">0 K</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">Energia Totale</span>
+                    <span class="stat-label">Energia Tot. (E₀)</span>
                     <span class="stat-value" id="statEng">0 E₀</span>
                 </div>
             </div>
@@ -278,6 +314,7 @@
     <script>
         let simCanvas, simCtx, graphCanvas, graphCtx;
         let sliderN, sliderDensity, sliderTemp, sliderSpeed, btnRestart, btnMode, btnViewMode, groupN, warningPacking;
+        let btnCalcGR, btnToggleChart, card2Title;
 
         let modeNVT = 1;
         let fixedBoxView = true;
@@ -286,8 +323,10 @@
 
         let isRunning = false;
         let isInitialized = false;
+        let activeGraphView = 'live'; // 'live' or 'gr'
 
         let c_initSim, c_stepSim, c_getPosPtr, c_getBoxL, c_getTemp, c_getEKin, c_getEPot, c_getETot, c_getStep;
+        let c_startGrSampling, c_getGrStatus, c_getGrProgress, c_getGrTarget, c_getGrNbins, c_getGrRPtr, c_getGrResultPtr;
 
         const maxHistory = 150;
         let historyTemp = [];
@@ -314,6 +353,14 @@
             c_getETot = Module.cwrap('get_energy_tot', 'number', []);
             c_getStep = Module.cwrap('get_step', 'number', []);
 
+            c_startGrSampling = Module.cwrap('start_gr_sampling', 'void', ['number']);
+            c_getGrStatus = Module.cwrap('get_gr_status', 'number', []);
+            c_getGrProgress = Module.cwrap('get_gr_progress', 'number', []);
+            c_getGrTarget = Module.cwrap('get_gr_target', 'number', []);
+            c_getGrNbins = Module.cwrap('get_gr_nbins', 'number', []);
+            c_getGrRPtr = Module.cwrap('get_gr_r_ptr', 'number', []);
+            c_getGrResultPtr = Module.cwrap('get_gr_result_ptr', 'number', []);
+
             updateUIControls();
             startSimulation();
             isRunning = true;
@@ -329,6 +376,16 @@
                 sliderN.disabled = false;
                 groupN.style.opacity = '1.0';
                 btnViewMode.textContent = "Vista: Scala Fisica (L varia con \u03C1)";
+            }
+        }
+
+        function updateGraphHeader() {
+            if (activeGraphView === 'live') {
+                card2Title.textContent = "Grafici Live (T & E_tot)";
+                btnToggleChart.textContent = "Mostra g(r)";
+            } else {
+                card2Title.textContent = "Funzione di Correlazione g(r)";
+                btnToggleChart.textContent = "Mostra T & E";
             }
         }
 
@@ -382,6 +439,9 @@
             btnRestart = document.getElementById('btnRestart');
             btnMode = document.getElementById('btnMode');
             btnViewMode = document.getElementById('btnViewMode');
+            btnCalcGR = document.getElementById('btnCalcGR');
+            btnToggleChart = document.getElementById('btnToggleChart');
+            card2Title = document.getElementById('card2Title');
             groupN = document.getElementById('groupN');
             warningPacking = document.getElementById('warningPacking');
 
@@ -403,6 +463,20 @@
                 fixedBoxView = !fixedBoxView;
                 updateUIControls();
                 startSimulation();
+            });
+
+            btnCalcGR.addEventListener('click', () => {
+                if (c_startGrSampling) {
+                    c_startGrSampling(10000);
+                    btnCalcGR.textContent = "Calcolo g(r)... 0%";
+                    activeGraphView = 'gr';
+                    updateGraphHeader();
+                }
+            });
+
+            btnToggleChart.addEventListener('click', () => {
+                activeGraphView = activeGraphView === 'live' ? 'gr' : 'live';
+                updateGraphHeader();
             });
 
             btnRestart.addEventListener('click', startSimulation);
@@ -523,11 +597,172 @@
             }
         }
 
+        // DISEGNO GRAFICO FUNZIONE DI CORRELAZIONE g(r)
+        function drawGRChart() {
+            graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+
+            const w = graphCanvas.width;
+            const h = graphCanvas.height;
+            const status = c_getGrStatus ? c_getGrStatus() : 0;
+
+            if (status === 0) {
+                graphCtx.fillStyle = '#94a3b8';
+                graphCtx.font = '13px sans-serif';
+                graphCtx.textAlign = 'center';
+                graphCtx.fillText("Premi 'Calcola g(r)' nel pannello di controllo", w / 2, h / 2 - 10);
+                graphCtx.fillText("(10.000 step di integrazione ad alta velocità in WASM)", w / 2, h / 2 + 12);
+                return;
+            }
+
+            const nBins = c_getGrNbins();
+            const rPtr = c_getGrRPtr();
+            const resPtr = c_getGrResultPtr();
+
+            if (!rPtr || !resPtr || !Module.HEAPF64) return;
+
+            const rArr = new Float64Array(Module.HEAPF64.buffer, rPtr, nBins);
+            const resArr = new Float64Array(Module.HEAPF64.buffer, resPtr, nBins);
+
+            const padL = 50, padR = 25, padT = 35, padB = 55;
+            const plotW = w - padL - padR;
+            const plotH = h - padT - padB;
+
+            // Bordo Grafico
+            graphCtx.strokeStyle = '#334155';
+            graphCtx.lineWidth = 1;
+            graphCtx.strokeRect(padL, padT, plotW, plotH);
+
+            let maxVal = 2.5;
+            for (let i = 0; i < nBins; i++) {
+                if (resArr[i] > maxVal) maxVal = resArr[i];
+            }
+            maxVal = Math.ceil(maxVal * 1.1 * 10) / 10;
+            if (maxVal < 2.0) maxVal = 2.0;
+
+            const rMax = rArr[nBins - 1];
+
+            // Grid & Ticks Y (g(r))
+            graphCtx.font = '10px sans-serif';
+            graphCtx.fillStyle = '#94a3b8';
+            graphCtx.textAlign = 'right';
+            graphCtx.textBaseline = 'middle';
+
+            const ySteps = 5;
+            for (let i = 0; i <= ySteps; i++) {
+                let val = (maxVal / ySteps) * i;
+                let y = padT + plotH - (val / maxVal) * plotH;
+
+                graphCtx.strokeStyle = 'rgba(51, 65, 85, 0.4)';
+                graphCtx.beginPath();
+                graphCtx.moveTo(padL, y);
+                graphCtx.lineTo(padL + plotW, y);
+                graphCtx.stroke();
+
+                graphCtx.fillText(val.toFixed(1), padL - 8, y);
+            }
+
+            // Linea riferimento gas ideale g(r) = 1.0
+            const yIdeal = padT + plotH - (1.0 / maxVal) * plotH;
+            if (yIdeal >= padT && yIdeal <= padT + plotH) {
+                graphCtx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+                graphCtx.setLineDash([4, 4]);
+                graphCtx.beginPath();
+                graphCtx.moveTo(padL, yIdeal);
+                graphCtx.lineTo(padL + plotW, yIdeal);
+                graphCtx.stroke();
+                graphCtx.setLineDash([]);
+            }
+
+            // Grid & Ticks X (r in Angstrom)
+            graphCtx.textAlign = 'center';
+            graphCtx.textBaseline = 'top';
+            const xSteps = 5;
+            for (let i = 0; i <= xSteps; i++) {
+                let rVal = (rMax / xSteps) * i;
+                let x = padL + (i / xSteps) * plotW;
+
+                graphCtx.strokeStyle = 'rgba(51, 65, 85, 0.4)';
+                graphCtx.beginPath();
+                graphCtx.moveTo(x, padT);
+                graphCtx.lineTo(x, padT + plotH);
+                graphCtx.stroke();
+
+                graphCtx.fillText(rVal.toFixed(1), x, padT + plotH + 6);
+            }
+
+            // Etichette assi
+            graphCtx.fillStyle = '#38bdf8';
+            graphCtx.font = '11px sans-serif';
+            graphCtx.fillText("Distanza r (Å)", padL + plotW / 2, padT + plotH + 24);
+
+            graphCtx.save();
+            graphCtx.translate(14, padT + plotH / 2);
+            graphCtx.rotate(-Math.PI / 2);
+            graphCtx.textAlign = 'center';
+            graphCtx.fillText("g(r)", 0, 0);
+            graphCtx.restore();
+
+            // Note stato/progresso
+            if (status === 1) {
+                const prog = c_getGrProgress ? c_getGrProgress() : 0;
+                const tgt = c_getGrTarget ? c_getGrTarget() : 10000;
+                const pct = Math.floor((prog / tgt) * 100);
+                graphCtx.fillStyle = '#f59e0b';
+                graphCtx.textAlign = 'right';
+                graphCtx.fillText(`Campionamento in corso: ${pct}%`, padL + plotW, padT - 10);
+            } else if (status === 2) {
+                graphCtx.fillStyle = '#4ade80';
+                graphCtx.textAlign = 'right';
+                graphCtx.fillText("Campionamento completato (10.000 step)", padL + plotW, padT - 10);
+            }
+
+            // Tracciamento curva g(r)
+            graphCtx.strokeStyle = '#38bdf8';
+            graphCtx.lineWidth = 2.5;
+            graphCtx.beginPath();
+            let started = false;
+
+            for (let i = 0; i < nBins; i++) {
+                let rVal = rArr[i];
+                let gVal = resArr[i];
+
+                let x = padL + (rVal / rMax) * plotW;
+                let y = padT + plotH - (gVal / maxVal) * plotH;
+                if (y < padT) y = padT;
+                if (y > padT + plotH) y = padT + plotH;
+
+                if (!started) {
+                    graphCtx.moveTo(x, y);
+                    started = true;
+                } else {
+                    graphCtx.lineTo(x, y);
+                }
+            }
+            graphCtx.stroke();
+        }
+
         function loop() {
             if (isRunning && c_stepSim) {
-                const stepsPerFrame = parseInt(sliderSpeed.value);
+                let stepsPerFrame = parseInt(sliderSpeed.value);
+
+                let grStatus = c_getGrStatus ? c_getGrStatus() : 0;
+                if (grStatus === 1) {
+                    stepsPerFrame = Math.max(stepsPerFrame, 60);
+                }
 
                 c_stepSim(stepsPerFrame);
+
+                grStatus = c_getGrStatus ? c_getGrStatus() : 0;
+                if (grStatus === 1) {
+                    const prog = c_getGrProgress();
+                    const tgt = c_getGrTarget();
+                    const pct = Math.floor((prog / tgt) * 100);
+                    btnCalcGR.textContent = `Calcolo g(r)... ${pct}%`;
+                } else if (grStatus === 2 && btnCalcGR.textContent.startsWith("Calcolo")) {
+                    btnCalcGR.textContent = "Calcola g(r) (10.000 Step)";
+                    activeGraphView = 'gr';
+                    updateGraphHeader();
+                }
 
                 const posPtr = c_getPosPtr();
                 const L = c_getBoxL();
@@ -547,7 +782,11 @@
                         historyEnergy.shift();
                     }
 
-                    drawRealtimeCharts(parseFloat(sliderTemp.value));
+                    if (activeGraphView === 'live') {
+                        drawRealtimeCharts(parseFloat(sliderTemp.value));
+                    } else {
+                        drawGRChart();
+                    }
 
                     document.getElementById('statStep').textContent = step;
                     document.getElementById('statBoxL').textContent = L.toFixed(1) + " Å";

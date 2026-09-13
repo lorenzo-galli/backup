@@ -48,6 +48,15 @@ typedef struct {
 
 static System *g_sys = NULL;
 
+#define GR_NBINS 200
+static double g_r_histogram[GR_NBINS];
+static double g_r_axis[GR_NBINS];
+static double g_r_result[GR_NBINS];
+static int g_gr_active = 0;           /* 0: idle, 1: sampling, 2: completed */
+static int g_gr_target_steps = 0;
+static int g_gr_collected_steps = 0;
+static double g_gr_dr = 0.0;
+
 static double rand_gaussian(double mean, double stddev) {
     double u1 = (double)rand() / RAND_MAX;
     double u2 = (double)rand() / RAND_MAX;
@@ -293,7 +302,27 @@ void init_simulation(int N, double density, double target_temp, double dt, int m
             rescale_velocities(g_sys);
         }
     }
+    g_gr_active = 0;
+    g_gr_target_steps = 0;
+    g_gr_collected_steps = 0;
+
     compute_energies(g_sys);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void start_gr_sampling(int target_steps) {
+    if (g_sys == NULL) return;
+    for (int k = 0; k < GR_NBINS; k++) {
+        g_r_histogram[k] = 0.0;
+        g_r_result[k] = 0.0;
+    }
+    g_gr_dr = (g_sys->L * 0.5) / GR_NBINS;
+    for (int k = 0; k < GR_NBINS; k++) {
+        g_r_axis[k] = (k + 0.5) * g_gr_dr;
+    }
+    g_gr_target_steps = target_steps > 0 ? target_steps : 10000;
+    g_gr_collected_steps = 0;
+    g_gr_active = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -321,8 +350,51 @@ void step_simulation(int num_steps) {
             g_sys->vel[i].y += 0.5 * g_sys->force[i].y * dt_m;
         }
         
+        /* FIX: compute_energies DEVE essere chiamato PRIMA di rescale_velocities per evitare picchi/oscillazioni */
         if (g_sys->mode_nvt && (g_sys->step % 5 == 0)) {
+            compute_energies(g_sys);
             rescale_velocities(g_sys);
+        }
+        
+        if (g_gr_active == 1) {
+            double r_max = g_sys->L * 0.5;
+            double r2_max = r_max * r_max;
+            double inv_dr = 1.0 / g_gr_dr;
+            
+            for (int i = 0; i < g_sys->N; i++) {
+                for (int j = i + 1; j < g_sys->N; j++) {
+                    double rx = g_sys->pos[i].x - g_sys->pos[j].x;
+                    double ry = g_sys->pos[i].y - g_sys->pos[j].y;
+                    rx -= g_sys->L * round(rx / g_sys->L);
+                    ry -= g_sys->L * round(ry / g_sys->L);
+                    double r2 = rx * rx + ry * ry;
+                    if (r2 < r2_max) {
+                        double r = sqrt(r2);
+                        int bin = (int)(r * inv_dr);
+                        if (bin >= 0 && bin < GR_NBINS) {
+                            g_r_histogram[bin] += 1.0;
+                        }
+                    }
+                }
+            }
+            g_gr_collected_steps++;
+
+            if (g_gr_collected_steps >= g_gr_target_steps) {
+                double rho = (double)g_sys->N / (g_sys->L * g_sys->L);
+                double frames = (double)g_gr_collected_steps;
+                double dr2 = g_gr_dr * g_gr_dr;
+                
+                for (int k = 0; k < GR_NBINS; k++) {
+                    double shell_area = M_PI * (2.0 * k + 1.0) * dr2;
+                    double ideal_count = rho * shell_area;
+                    if (ideal_count > 1e-12) {
+                        g_r_result[k] = (2.0 * g_r_histogram[k] / (frames * (double)g_sys->N)) / ideal_count;
+                    } else {
+                        g_r_result[k] = 0.0;
+                    }
+                }
+                g_gr_active = 2;
+            }
         }
         
         g_sys->time += g_sys->dt;
@@ -330,6 +402,24 @@ void step_simulation(int num_steps) {
     }
     compute_energies(g_sys);
 }
+
+EMSCRIPTEN_KEEPALIVE
+int get_gr_status() { return g_gr_active; }
+
+EMSCRIPTEN_KEEPALIVE
+int get_gr_progress() { return g_gr_collected_steps; }
+
+EMSCRIPTEN_KEEPALIVE
+int get_gr_target() { return g_gr_target_steps; }
+
+EMSCRIPTEN_KEEPALIVE
+int get_gr_nbins() { return GR_NBINS; }
+
+EMSCRIPTEN_KEEPALIVE
+double* get_gr_r_ptr() { return g_r_axis; }
+
+EMSCRIPTEN_KEEPALIVE
+double* get_gr_result_ptr() { return g_r_result; }
 
 EMSCRIPTEN_KEEPALIVE
 double* get_positions_ptr() {
