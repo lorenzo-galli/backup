@@ -270,7 +270,7 @@
 <body>
 
     <h1>Dinamica Molecolare 2D - Fluido di Lennard-Jones</h1>
-    <p class="subtitle">Simulazione in Unità Ridotte (r* = r/&sigma;, &rho;* = &rho;&sigma;&sup2;, T* = k_B T/&epsilon;, u* = E*/N) &middot; Motore C11/WASM</p>
+    <p class="subtitle">Simulazione in Unità Ridotte - Realizzato usando WASM</p>
 
     <div class="main-layout">
         <!-- Card 1: Griglia Simulazione Particelle -->
@@ -487,31 +487,30 @@
 
         function updatePhaseBadge(rhoStar, tempStar) {
             if (rhoStar >= 0.80) {
-                phaseIcon.textContent = "🔷";
+                
                 phaseText.textContent = "Fase Solida / Cristallina 2D (\u03C1* \u2265 0.80)";
                 phaseBadge.style.color = "#38bdf8";
                 phaseBadge.style.borderColor = "rgba(56, 189, 248, 0.4)";
                 phaseBadge.style.backgroundColor = "rgba(56, 189, 248, 0.15)";
             } else if (tempStar < 0.515 && rhoStar >= 0.15) {
-                phaseIcon.textContent = "🟡";
+                
                 phaseText.textContent = "Coesistenza Liquido-Gas (Subcritico, T* < T*c)";
                 phaseBadge.style.color = "#fbbf24";
                 phaseBadge.style.borderColor = "rgba(251, 191, 36, 0.4)";
                 phaseBadge.style.backgroundColor = "rgba(251, 191, 36, 0.15)";
             } else if (rhoStar < 0.15) {
-                phaseIcon.textContent = "💨";
+                
                 phaseText.textContent = "Fase Gas / Vapore Diluito (\u03C1* < 0.15)";
                 phaseBadge.style.color = "#94a3b8";
                 phaseBadge.style.borderColor = "rgba(148, 163, 184, 0.3)";
                 phaseBadge.style.backgroundColor = "rgba(148, 163, 184, 0.1)";
             } else if (tempStar >= 0.515 && rhoStar >= 0.50) {
-                phaseIcon.textContent = "🌊";
                 phaseText.textContent = "Fase Liquida / Fluido Denso";
                 phaseBadge.style.color = "#34d399";
                 phaseBadge.style.borderColor = "rgba(52, 211, 153, 0.4)";
                 phaseBadge.style.backgroundColor = "rgba(52, 211, 153, 0.15)";
             } else {
-                phaseIcon.textContent = "✨";
+                
                 phaseText.textContent = "Fluido Supercritico (T* \u2265 T*c \u2248 0.515)";
                 phaseBadge.style.color = "#c084fc";
                 phaseBadge.style.borderColor = "rgba(192, 132, 252, 0.4)";
