@@ -8,10 +8,10 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-/* Costanti fisiche Argon (Angstrom, ps, u, K) */
-#define EPSILON 99.365319
-#define SIGMA 3.4
-#define MASS 39.9
+/* Costanti fisiche di default (Argon: Angstrom, ps, u, K) */
+#define DEFAULT_EPSILON 99.365319
+#define DEFAULT_SIGMA 3.4
+#define DEFAULT_MASS 39.9
 #define KB 0.831446
 #define MAX_FORCE 8000.0
 
@@ -27,6 +27,11 @@ typedef struct {
     double T_target;
     double dt;
     int mode_nvt;
+    
+    /* Parametri fisici della specie atomica selezionata */
+    double sigma;
+    double epsilon;
+    double mass;
     
     Vec2D *pos;
     Vec2D *vel;
@@ -113,13 +118,13 @@ static void compute_forces_cell(System *sys) {
     
     build_cell_list(sys);
     
-    double r2_cut = (2.5 * SIGMA) * (2.5 * SIGMA);
+    double r2_cut = (2.5 * sys->sigma) * (2.5 * sys->sigma);
     if (r2_cut > (sys->L * 0.5) * (sys->L * 0.5)) {
         r2_cut = (sys->L * 0.5) * (sys->L * 0.5);
     }
     
-    double r2_min = (0.65 * SIGMA) * (0.65 * SIGMA);
-    double sig2 = SIGMA * SIGMA;
+    double r2_min = (0.65 * sys->sigma) * (0.65 * sys->sigma);
+    double sig2 = sys->sigma * sys->sigma;
     
     /* 9 celle vicine (inclusa la cella corrente) */
     const int neighbor_dx[9] = {0, 1, 1, 0, -1, -1, -1, 0, 1};
@@ -154,9 +159,9 @@ static void compute_forces_cell(System *sys) {
                         double sr6 = sr2 * sr2 * sr2;
                         double sr12 = sr6 * sr6;
                         
-                        sys->E_pot += 4.0 * EPSILON * (sr12 - sr6);
+                        sys->E_pot += 4.0 * sys->epsilon * (sr12 - sr6);
                         
-                        double f_mag = 24.0 * EPSILON / r2_safe * (2.0 * sr12 - sr6);
+                        double f_mag = 24.0 * sys->epsilon / r2_safe * (2.0 * sr12 - sr6);
                         if (f_mag > MAX_FORCE) f_mag = MAX_FORCE;
                         if (f_mag < -MAX_FORCE) f_mag = -MAX_FORCE;
                         
@@ -177,20 +182,23 @@ static void compute_energies(System *sys) {
     for (int i = 0; i < sys->N; i++) {
         v2_sum += sys->vel[i].x * sys->vel[i].x + sys->vel[i].y * sys->vel[i].y;
     }
-    sys->E_kin = 0.5 * MASS * v2_sum;
+    sys->E_kin = 0.5 * sys->mass * v2_sum;
     sys->E_tot = sys->E_kin + sys->E_pot;
     double dof = 2.0 * (sys->N - 1);
     sys->T_inst = 2.0 * sys->E_kin / (dof * KB);
 }
 
-static void rescale_velocities(System *sys) {
-    if (sys->T_inst > 0.0 && !isnan(sys->T_inst)) {
-        double factor = sqrt(sys->T_target / sys->T_inst);
-        if (factor < 0.2) factor = 0.2;
-        if (factor > 5.0) factor = 5.0;
+/* TERMOSTATO DI BERENDSEN */
+static void apply_berendsen_thermostat(System *sys) {
+    if (sys->T_inst > 1.0 && !isnan(sys->T_inst)) {
+        double tau = 0.10; /* Tempo di accoppiamento termico in ps */
+        double lambda2 = 1.0 + (sys->dt / tau) * (sys->T_target / sys->T_inst - 1.0);
+        if (lambda2 < 0.1) lambda2 = 0.1;
+        if (lambda2 > 4.0) lambda2 = 4.0;
+        double lambda = sqrt(lambda2);
         for (int i = 0; i < sys->N; i++) {
-            sys->vel[i].x *= factor;
-            sys->vel[i].y *= factor;
+            sys->vel[i].x *= lambda;
+            sys->vel[i].y *= lambda;
         }
     }
 }
@@ -216,7 +224,7 @@ void free_simulation() {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void init_simulation(int N, double density, double target_temp, double dt, int mode_nvt) {
+void init_simulation(int N, double density, double target_temp, double dt, int mode_nvt, double sigma, double epsilon, double mass) {
     free_simulation();
     
     g_sys = (System*)malloc(sizeof(System));
@@ -227,11 +235,16 @@ void init_simulation(int N, double density, double target_temp, double dt, int m
     g_sys->dt = dt;
     g_sys->mode_nvt = mode_nvt;
     
+    /* Configurazione parametri della specie atomica (fallback ad Argon se non specificati) */
+    g_sys->sigma = (sigma > 0.1) ? sigma : DEFAULT_SIGMA;
+    g_sys->epsilon = (epsilon > 0.1) ? epsilon : DEFAULT_EPSILON;
+    g_sys->mass = (mass > 0.1) ? mass : DEFAULT_MASS;
+    
     g_sys->pos = (Vec2D*)malloc(N * sizeof(Vec2D));
     g_sys->vel = (Vec2D*)malloc(N * sizeof(Vec2D));
     g_sys->force = (Vec2D*)malloc(N * sizeof(Vec2D));
     
-    double r_cutoff = 2.5 * SIGMA;
+    double r_cutoff = 2.5 * g_sys->sigma;
     if (r_cutoff > g_sys->L / 2.0) r_cutoff = g_sys->L / 2.0;
     
     g_sys->M = (int)(g_sys->L / r_cutoff);
@@ -258,7 +271,7 @@ void init_simulation(int N, double density, double target_temp, double dt, int m
         }
     }
     
-    double stddev = sqrt(KB * target_temp / MASS);
+    double stddev = sqrt(KB * target_temp / g_sys->mass);
     Vec2D v_com = {0.0, 0.0};
     for (int i = 0; i < N; i++) {
         g_sys->vel[i].x = rand_gaussian(0.0, stddev);
@@ -276,9 +289,9 @@ void init_simulation(int N, double density, double target_temp, double dt, int m
     compute_forces_cell(g_sys);
     compute_energies(g_sys);
     
-    /* Pre-equilibrazione ultra-veloce di 150 step */
-    double dt_m = g_sys->dt / MASS;
-    for (int eq = 0; eq < 150; eq++) {
+    /* Pre-equilibrazione fluida con termostato Berendsen */
+    double dt_m = g_sys->dt / g_sys->mass;
+    for (int eq = 0; eq < 200; eq++) {
         for (int i = 0; i < g_sys->N; i++) {
             g_sys->pos[i].x += g_sys->vel[i].x * g_sys->dt + 0.5 * g_sys->force[i].x * dt_m * g_sys->dt;
             g_sys->pos[i].y += g_sys->vel[i].y * g_sys->dt + 0.5 * g_sys->force[i].y * dt_m * g_sys->dt;
@@ -297,10 +310,8 @@ void init_simulation(int N, double density, double target_temp, double dt, int m
             g_sys->vel[i].y += 0.5 * g_sys->force[i].y * dt_m;
         }
         
-        if (eq % 5 == 0) {
-            compute_energies(g_sys);
-            rescale_velocities(g_sys);
-        }
+        compute_energies(g_sys);
+        apply_berendsen_thermostat(g_sys);
     }
     g_gr_active = 0;
     g_gr_target_steps = 0;
@@ -318,7 +329,8 @@ void start_gr_sampling(int target_steps) {
     }
     g_gr_dr = (g_sys->L * 0.5) / GR_NBINS;
     for (int k = 0; k < GR_NBINS; k++) {
-        g_r_axis[k] = (k + 0.5) * g_gr_dr;
+        /* Distanza ridotta r* = r / sigma della specie corrente */
+        g_r_axis[k] = ((k + 0.5) * g_gr_dr) / g_sys->sigma;
     }
     g_gr_target_steps = target_steps > 0 ? target_steps : 10000;
     g_gr_collected_steps = 0;
@@ -329,7 +341,7 @@ EMSCRIPTEN_KEEPALIVE
 void step_simulation(int num_steps) {
     if (g_sys == NULL) return;
     
-    double dt_m = g_sys->dt / MASS;
+    double dt_m = g_sys->dt / g_sys->mass;
     for (int s = 0; s < num_steps; s++) {
         for (int i = 0; i < g_sys->N; i++) {
             g_sys->pos[i].x += g_sys->vel[i].x * g_sys->dt + 0.5 * g_sys->force[i].x * dt_m * g_sys->dt;
@@ -350,10 +362,9 @@ void step_simulation(int num_steps) {
             g_sys->vel[i].y += 0.5 * g_sys->force[i].y * dt_m;
         }
         
-        /* FIX: compute_energies DEVE essere chiamato PRIMA di rescale_velocities per evitare picchi/oscillazioni */
-        if (g_sys->mode_nvt && (g_sys->step % 5 == 0)) {
-            compute_energies(g_sys);
-            rescale_velocities(g_sys);
+        compute_energies(g_sys);
+        if (g_sys->mode_nvt) {
+            apply_berendsen_thermostat(g_sys);
         }
         
         if (g_gr_active == 1) {
@@ -432,8 +443,18 @@ double get_box_length() {
 }
 
 EMSCRIPTEN_KEEPALIVE
+double get_reduced_box_length() {
+    return g_sys ? (g_sys->L / g_sys->sigma) : 0.0;
+}
+
+EMSCRIPTEN_KEEPALIVE
 double get_temperature() {
     return g_sys ? g_sys->T_inst : 0.0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+double get_reduced_temperature() {
+    return g_sys ? (g_sys->T_inst * KB / g_sys->epsilon) : 0.0;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -449,6 +470,16 @@ double get_energy_pot() {
 EMSCRIPTEN_KEEPALIVE
 double get_energy_tot() {
     return g_sys ? g_sys->E_tot : 0.0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+double get_reduced_energy_tot_per_particle() {
+    return (g_sys && g_sys->N > 0) ? (g_sys->E_tot / (g_sys->N * g_sys->epsilon)) : 0.0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+double get_reduced_density() {
+    return g_sys ? (g_sys->density * g_sys->sigma * g_sys->sigma) : 0.0;
 }
 
 EMSCRIPTEN_KEEPALIVE

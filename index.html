@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dinamica Molecolare 2D - Simulazione WebAssembly & Grafici Live</title>
+    <title>Dinamica Molecolare 2D - Fluido di Lennard-Jones (Unità Ridotte)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -37,6 +37,7 @@
             margin: 0 0 20px 0;
             color: var(--text-muted);
             font-size: 14px;
+            text-align: center;
         }
 
         .main-layout {
@@ -59,8 +60,27 @@
             flex-direction: column;
             align-items: center;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            flex: 0 1 auto;
             box-sizing: border-box;
+        }
+
+        .sim-card {
+            width: 580px;
+            flex: 0 0 580px;
+        }
+
+        .sim-card canvas {
+            width: 100%;
+            max-width: 550px;
+        }
+
+        .chart-card {
+            width: 410px;
+            flex: 0 0 410px;
+        }
+
+        .chart-card canvas {
+            width: 100%;
+            max-width: 380px;
         }
 
         .card-title {
@@ -77,8 +97,6 @@
             background-color: #020617;
             border-radius: 8px;
             border: 1px solid var(--border-color);
-            width: 100%;
-            max-width: 400px;
             height: auto;
             aspect-ratio: 1 / 1;
         }
@@ -87,12 +105,12 @@
             background-color: var(--panel-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            padding: 20px;
-            width: 310px;
-            flex: 0 0 310px;
+            padding: 16px;
+            width: 325px;
+            flex: 0 0 325px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 10px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
             box-sizing: border-box;
         }
@@ -100,7 +118,7 @@
         .control-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
             transition: opacity 0.2s ease;
         }
 
@@ -109,6 +127,32 @@
             justify-content: space-between;
             font-size: 13px;
             font-weight: 600;
+        }
+
+        .sub-val {
+            font-size: 11px;
+            color: var(--text-muted);
+            align-self: flex-end;
+            margin-top: -2px;
+        }
+
+        select {
+            background-color: #090d16;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 11.5px;
+            font-family: inherit;
+            cursor: pointer;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border-color 0.2s ease;
+        }
+
+        select:focus {
+            border-color: var(--accent-color);
         }
 
         input[type="range"] {
@@ -124,7 +168,7 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
-            margin-top: 5px;
+            margin-top: 3px;
         }
 
         button {
@@ -158,7 +202,7 @@
             background-color: #090d16;
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            padding: 12px;
+            padding: 10px 12px;
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 8px;
@@ -180,21 +224,24 @@
         .stat-value {
             color: var(--accent-color);
             font-weight: bold;
-            font-size: 13px;
+            font-size: 12px;
         }
 
-        .warning-badge {
-            background-color: rgba(245, 158, 11, 0.15);
-            border: 1px solid var(--warning-color);
-            color: #fcd34d;
+        .phase-badge {
+            background-color: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: #38bdf8;
             border-radius: 6px;
-            padding: 8px 10px;
+            padding: 6px 10px;
             font-size: 11px;
-            line-height: 1.4;
-            display: none;
+            line-height: 1.3;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
         }
 
-        @media (max-width: 1150px) {
+        @media (max-width: 1380px) {
             .main-layout {
                 flex-wrap: wrap;
             }
@@ -209,69 +256,97 @@
                 align-items: center;
                 gap: 15px;
             }
-            .visualizer-card, .controls-panel {
+            .visualizer-card, .controls-panel, .sim-card, .chart-card {
                 width: 100%;
                 max-width: 450px;
                 flex: none;
+            }
+            .sim-card canvas, .chart-card canvas {
+                max-width: 400px;
             }
         }
     </style>
 </head>
 <body>
 
-    <h1>Dinamica Molecolare 2D (Argon)</h1>
-    <p class="subtitle"></p>
+    <h1>Dinamica Molecolare 2D - Fluido di Lennard-Jones</h1>
+    <p class="subtitle">Simulazione in Unità Ridotte (r* = r/&sigma;, &rho;* = &rho;&sigma;&sup2;, T* = k_B T/&epsilon;, u* = E*/N) &middot; Motore C11/WASM</p>
 
     <div class="main-layout">
         <!-- Card 1: Griglia Simulazione Particelle -->
-        <div class="visualizer-card">
-            <div class="card-title">Griglia Particelle 2D</div>
-            <canvas id="simCanvas" width="450" height="450"></canvas>
+        <div class="visualizer-card sim-card">
+            <div class="card-title">Griglia Particelle 2D (r*)</div>
+            <canvas id="simCanvas" width="550" height="550"></canvas>
         </div>
 
-        <!-- Card 2: Grafici Real-Time / g(r) -->
-        <div class="visualizer-card">
+        <!-- Card 2: Grafici Real-Time / g(r*) -->
+        <div class="visualizer-card chart-card">
             <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                <span id="card2Title">Grafici Live (T &amp; E_tot)</span>
-                <button id="btnToggleChart" class="secondary" style="width: auto; padding: 3px 8px; font-size: 11px; margin: 0;">Mostra g(r)</button>
+                <span id="card2Title">Grafici Live (T* &amp; u*)</span>
+                <button id="btnToggleChart" class="secondary" style="width: auto; padding: 3px 8px; font-size: 11px; margin: 0;">Mostra g(r*)</button>
             </div>
             <canvas id="graphCanvas" width="450" height="450"></canvas>
         </div>
 
         <!-- Card 3: Pannello di Controllo -->
         <div class="controls-panel">
-            <div class="card-title">Parametri Simulazione</div>
+            <div class="card-title">Parametri Ridotti LJ</div>
 
-            <!-- Slider Densita -->
+            <!-- Badge Stato Diagramma di Fase 2D -->
+            <div class="phase-badge" id="phaseBadge">
+                <span id="phaseIcon">🌊</span>
+                <span id="phaseText">Fluido Supercritico (T* &ge; T*c)</span>
+            </div>
+
+            <!-- Selettore Specie Atomica (Gas Nobili) -->
             <div class="control-group">
                 <div class="label-val">
-                    <span>Densità (&rho;)</span>
-                    <span id="valDensity">0.05 &#198;⁻²</span>
+                    <span>Specie Atomica</span>
+                    <span id="valSpecies" style="color: var(--accent-color);">Argon (Ar)</span>
                 </div>
-                <input type="range" id="sliderDensity" min="0.01" max="0.10" step="0.0025" value="0.025">
+                <select id="selectSpecies">
+                    <option value="Ar" selected>Argon (Ar) &middot; &sigma;=3.40 &#198;, m=39.95 u, &epsilon;/kB=119.8 K</option>
+                    <option value="Kr">Kripton (Kr) &middot; &sigma;=3.65 &#198;, m=83.80 u, &epsilon;/kB=171.0 K</option>
+                </select>
+            </div>
+
+            <!-- Slider Densita Ridotta rho* -->
+            <div class="control-group">
+                <div class="label-val">
+                    <span>Densità Ridotta (&rho;*)</span>
+                    <span id="valDensity">0.55</span>
+                </div>
+                <input type="range" id="sliderDensity" min="0.05" max="0.85" step="0.02" value="0.55">
+                <span class="sub-val" id="subDensity">&rho; = 0.048 &#198;⁻²</span>
+            </div>
+
+            <!-- Slider Dimensione Box L* (Disabilitato in Scala Fisica) -->
+            <div class="control-group" id="groupL">
+                <div class="label-val">
+                    <span>Lato Box (L*)</span>
+                    <span id="valL">30.0 &sigma;</span>
+                </div>
+                <input type="range" id="sliderL" min="15" max="120" step="1" value="30">
+                <span class="sub-val" id="subL">L = 102.0 &#198;</span>
             </div>
 
             <!-- Slider Numero di Particelle N (Disabilitato in Modalita' Box Fisso) -->
             <div class="control-group" id="groupN">
                 <div class="label-val">
                     <span>Particelle (N)</span>
-                    <span id="valN">500 (22x22)</span>
+                    <span id="valN">484 (22x22)</span>
                 </div>
-                <input type="range" id="sliderN" min="16" max="400" step="1" value="100">
+                <input type="range" id="sliderN" min="16" max="5184" step="1" value="484">
             </div>
 
-            <!-- Avviso Fisico per Densita Altissima -->
-            <div class="warning-badge" id="warningPacking">
-                ⚠️ <strong>Densità limite:</strong> La distanza tra atomi scende verso il diametro visivo (&sigma; = 3.4 &#198;).
-            </div>
-
-            <!-- Slider Temperatura -->
+            <!-- Slider Temperatura Ridotta T* -->
             <div class="control-group">
                 <div class="label-val">
-                    <span>Temperatura Target (T)</span>
-                    <span id="valTemp">150 K</span>
+                    <span>Temperatura Ridotta (T*)</span>
+                    <span id="valTemp">1.00</span>
                 </div>
-                <input type="range" id="sliderTemp" min="20" max="400" step="5" value="150">
+                <input type="range" id="sliderTemp" min="0.20" max="2.00" step="0.05" value="1.00">
+                <span class="sub-val" id="subTemp">T = 119.8 K &middot; T*c &asymp; 0.515</span>
             </div>
 
             <!-- Slider Velocita -->
@@ -284,9 +359,9 @@
             </div>
 
             <div class="button-group">
-                <button id="btnViewMode" class="secondary">Vista: Box Fisso (100 Å x 100 Å)</button>
-                <button id="btnMode" class="secondary">Modo: NVT (Termostato)</button>
-                <button id="btnCalcGR" class="secondary">Calcola g(r) (10.000 Step)</button>
+                <button id="btnViewMode" class="secondary">Vista: Box Fisso (L* modificabile, N bloccato)</button>
+                <button id="btnMode" class="secondary">Modo: NVT (Termostato Berendsen)</button>
+                <button id="btnCalcGR" class="secondary">Calcola g(r*) (10.000 Step)</button>
                 <button id="btnRestart">Riavvia Simulazione</button>
             </div>
 
@@ -296,16 +371,16 @@
                     <span class="stat-value" id="statStep">0</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">Lato Box (L)</span>
-                    <span class="stat-value" id="statBoxL">100 &#198;</span>
+                    <span class="stat-label">Lato Box (L*)</span>
+                    <span class="stat-value" id="statBoxL">30.0 &sigma;</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">Temp. Istantanea</span>
-                    <span class="stat-value" id="statTemp">0 K</span>
+                    <span class="stat-label">Temp. Istant. (T*)</span>
+                    <span class="stat-value" id="statTemp">1.00</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">Energia Tot. (E₀)</span>
-                    <span class="stat-value" id="statEng">0 E₀</span>
+                    <span class="stat-label">Energia Tot. (u*)</span>
+                    <span class="stat-value" id="statEng">-1.42 &epsilon;</span>
                 </div>
             </div>
         </div>
@@ -313,19 +388,42 @@
 
     <script>
         let simCanvas, simCtx, graphCanvas, graphCtx;
-        let sliderN, sliderDensity, sliderTemp, sliderSpeed, btnRestart, btnMode, btnViewMode, groupN, warningPacking;
-        let btnCalcGR, btnToggleChart, card2Title;
+        let sliderN, sliderL, sliderDensity, sliderTemp, sliderSpeed, btnRestart, btnMode, btnViewMode, groupN, groupL;
+        let selectSpecies, valSpecies, valN, valL, subL;
+        let btnCalcGR, btnToggleChart, card2Title, phaseBadge, phaseIcon, phaseText, subDensity, subTemp;
 
         let modeNVT = 1;
         let fixedBoxView = true;
-        const FIXED_L = 100.0;
-        let currentN = 500;
+
+        const SPECIES = {
+            Ar: {
+                name: "Argon (Ar)",
+                symbol: "Ar",
+                sigma: 3.40,               /* Angstrom */
+                epsOverKb: 119.8,          /* Kelvin (epsilon / kB) */
+                epsilon: 119.8 * 0.831446, /* 99.6072 u * Angstrom^2 / ps^2 */
+                mass: 39.948,              /* u */
+                color: '#38bdf8'           /* Cyan */
+            },
+            Kr: {
+                name: "Kripton (Kr)",
+                symbol: "Kr",
+                sigma: 3.65,               /* Angstrom */
+                epsOverKb: 171.0,          /* Kelvin (epsilon / kB) */
+                epsilon: 171.0 * 0.831446, /* 142.1773 u * Angstrom^2 / ps^2 */
+                mass: 83.798,              /* u */
+                color: '#c084fc'           /* Purple / Amethyst */
+            }
+        };
+        let currentSpeciesKey = 'Ar';
+        let currentN = 484;
 
         let isRunning = false;
         let isInitialized = false;
-        let activeGraphView = 'live'; // 'live' or 'gr'
+        let activeGraphView = 'live'; /* 'live' or 'gr' */
 
-        let c_initSim, c_stepSim, c_getPosPtr, c_getBoxL, c_getTemp, c_getEKin, c_getEPot, c_getETot, c_getStep;
+        let c_initSim, c_stepSim, c_getPosPtr, c_getBoxL, c_getReducedBoxL;
+        let c_getTemp, c_getReducedTemp, c_getEKin, c_getEPot, c_getETot, c_getReducedETot, c_getReducedDensity, c_getStep;
         let c_startGrSampling, c_getGrStatus, c_getGrProgress, c_getGrTarget, c_getGrNbins, c_getGrRPtr, c_getGrResultPtr;
 
         const maxHistory = 150;
@@ -334,7 +432,7 @@
 
         var Module = {
             onRuntimeInitialized: function() {
-                console.log("[WASM] WebAssembly inizializzato!");
+                console.log("[WASM] WebAssembly inizializzato con grandezze ridotte e specie dinamica!");
                 setupWasmAndStart();
             }
         };
@@ -343,14 +441,18 @@
             if (isInitialized) return;
             isInitialized = true;
 
-            c_initSim = Module.cwrap('init_simulation', 'void', ['number', 'number', 'number', 'number', 'number']);
+            c_initSim = Module.cwrap('init_simulation', 'void', ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number']);
             c_stepSim = Module.cwrap('step_simulation', 'void', ['number']);
             c_getPosPtr = Module.cwrap('get_positions_ptr', 'number', []);
             c_getBoxL = Module.cwrap('get_box_length', 'number', []);
+            c_getReducedBoxL = Module.cwrap('get_reduced_box_length', 'number', []);
             c_getTemp = Module.cwrap('get_temperature', 'number', []);
+            c_getReducedTemp = Module.cwrap('get_reduced_temperature', 'number', []);
             c_getEKin = Module.cwrap('get_energy_kin', 'number', []);
             c_getEPot = Module.cwrap('get_energy_pot', 'number', []);
             c_getETot = Module.cwrap('get_energy_tot', 'number', []);
+            c_getReducedETot = Module.cwrap('get_reduced_energy_tot_per_particle', 'number', []);
+            c_getReducedDensity = Module.cwrap('get_reduced_density', 'number', []);
             c_getStep = Module.cwrap('get_step', 'number', []);
 
             c_startGrSampling = Module.cwrap('start_gr_sampling', 'void', ['number']);
@@ -369,60 +471,162 @@
 
         function updateUIControls() {
             if (fixedBoxView) {
+                sliderL.disabled = false;
+                groupL.style.opacity = '1.0';
                 sliderN.disabled = true;
                 groupN.style.opacity = '0.4';
-                btnViewMode.textContent = "Vista: Box Fisso (100 Å x 100 Å)";
+                btnViewMode.textContent = "Vista: Box Fisso (L* modificabile, N bloccato)";
             } else {
+                sliderL.disabled = true;
+                groupL.style.opacity = '0.4';
                 sliderN.disabled = false;
                 groupN.style.opacity = '1.0';
-                btnViewMode.textContent = "Vista: Scala Fisica (L varia con \u03C1)";
+                btnViewMode.textContent = "Vista: Scala Fisica (N modificabile, L* bloccato)";
+            }
+        }
+
+        function updatePhaseBadge(rhoStar, tempStar) {
+            if (rhoStar >= 0.80) {
+                phaseIcon.textContent = "🔷";
+                phaseText.textContent = "Fase Solida / Cristallina 2D (\u03C1* \u2265 0.80)";
+                phaseBadge.style.color = "#38bdf8";
+                phaseBadge.style.borderColor = "rgba(56, 189, 248, 0.4)";
+                phaseBadge.style.backgroundColor = "rgba(56, 189, 248, 0.15)";
+            } else if (tempStar < 0.515 && rhoStar >= 0.15) {
+                phaseIcon.textContent = "🟡";
+                phaseText.textContent = "Coesistenza Liquido-Gas (Subcritico, T* < T*c)";
+                phaseBadge.style.color = "#fbbf24";
+                phaseBadge.style.borderColor = "rgba(251, 191, 36, 0.4)";
+                phaseBadge.style.backgroundColor = "rgba(251, 191, 36, 0.15)";
+            } else if (rhoStar < 0.15) {
+                phaseIcon.textContent = "💨";
+                phaseText.textContent = "Fase Gas / Vapore Diluito (\u03C1* < 0.15)";
+                phaseBadge.style.color = "#94a3b8";
+                phaseBadge.style.borderColor = "rgba(148, 163, 184, 0.3)";
+                phaseBadge.style.backgroundColor = "rgba(148, 163, 184, 0.1)";
+            } else if (tempStar >= 0.515 && rhoStar >= 0.50) {
+                phaseIcon.textContent = "🌊";
+                phaseText.textContent = "Fase Liquida / Fluido Denso";
+                phaseBadge.style.color = "#34d399";
+                phaseBadge.style.borderColor = "rgba(52, 211, 153, 0.4)";
+                phaseBadge.style.backgroundColor = "rgba(52, 211, 153, 0.15)";
+            } else {
+                phaseIcon.textContent = "✨";
+                phaseText.textContent = "Fluido Supercritico (T* \u2265 T*c \u2248 0.515)";
+                phaseBadge.style.color = "#c084fc";
+                phaseBadge.style.borderColor = "rgba(192, 132, 252, 0.4)";
+                phaseBadge.style.backgroundColor = "rgba(192, 132, 252, 0.15)";
             }
         }
 
         function updateGraphHeader() {
             if (activeGraphView === 'live') {
-                card2Title.textContent = "Grafici Live (T & E_tot)";
-                btnToggleChart.textContent = "Mostra g(r)";
+                card2Title.textContent = "Grafici Live (T* & u*)";
+                btnToggleChart.textContent = "Mostra g(r*)";
             } else {
-                card2Title.textContent = "Funzione di Correlazione g(r)";
-                btnToggleChart.textContent = "Mostra T & E";
+                card2Title.textContent = "Funzione di Correlazione g(r*)";
+                btnToggleChart.textContent = "Mostra T* & u*";
+            }
+        }
+
+        function syncParameters(source) {
+            const sp = SPECIES[currentSpeciesKey];
+            const rhoStar = parseFloat(sliderDensity.value);
+
+            if (fixedBoxView) {
+                let LStar = parseFloat(sliderL.value);
+                let areaStar = LStar * LStar;
+                let nIdeal = rhoStar * areaStar;
+                let side = Math.max(3, Math.round(Math.sqrt(nIdeal)));
+                currentN = side * side;
+                sliderN.value = currentN;
+
+                let effectiveRhoStar = currentN / areaStar;
+                let effectiveDensity = effectiveRhoStar / (sp.sigma * sp.sigma);
+
+                valL.textContent = `${LStar.toFixed(1)} \u03C3`;
+                subL.textContent = `L = ${(LStar * sp.sigma).toFixed(1)} \u00C5`;
+                valN.textContent = `${currentN} (${side}x${side})`;
+                document.getElementById('valDensity').textContent = effectiveRhoStar.toFixed(2);
+                subDensity.textContent = `\u03C1 = ${effectiveDensity.toFixed(3)} \u00C5\u207B\u00B2`;
+
+                updatePhaseBadge(effectiveRhoStar, parseFloat(sliderTemp.value));
+            } else {
+                let nRaw = parseInt(sliderN.value);
+                let side = Math.max(2, Math.round(Math.sqrt(nRaw)));
+                currentN = side * side;
+                sliderN.value = currentN;
+
+                let effectiveRhoStar = rhoStar;
+                let LStar = Math.sqrt(currentN / effectiveRhoStar);
+                sliderL.value = Math.round(LStar);
+
+                let effectiveDensity = effectiveRhoStar / (sp.sigma * sp.sigma);
+
+                valN.textContent = `${currentN} (${side}x${side})`;
+                valL.textContent = `${LStar.toFixed(1)} \u03C3`;
+                subL.textContent = `L = ${(LStar * sp.sigma).toFixed(1)} \u00C5`;
+                document.getElementById('valDensity').textContent = effectiveRhoStar.toFixed(2);
+                subDensity.textContent = `\u03C1 = ${effectiveDensity.toFixed(3)} \u00C5\u207B\u00B2`;
+
+                updatePhaseBadge(effectiveRhoStar, parseFloat(sliderTemp.value));
             }
         }
 
         function startSimulation() {
             if (!c_initSim) return;
 
-            const density = parseFloat(sliderDensity.value);
-            const temp = parseFloat(sliderTemp.value);
-            const dt = 0.01;
+            const sp = SPECIES[currentSpeciesKey];
+            const rhoStarRequested = parseFloat(sliderDensity.value);
+            const tempStar = parseFloat(sliderTemp.value);
+            const dt = 0.01; /* ps */
+
+            let effectiveRhoStar;
+            let effectiveDensity;
+            let LStar;
 
             if (fixedBoxView) {
-                let nIdeal = density * (FIXED_L * FIXED_L);
+                LStar = parseFloat(sliderL.value);
+                let areaStar = LStar * LStar;
+                let nIdeal = rhoStarRequested * areaStar;
                 let side = Math.max(3, Math.round(Math.sqrt(nIdeal)));
                 currentN = side * side;
-                var effectiveDensity = currentN / (FIXED_L * FIXED_L);
+                sliderN.value = currentN;
+                effectiveRhoStar = currentN / areaStar;
+                effectiveDensity = effectiveRhoStar / (sp.sigma * sp.sigma);
             } else {
                 let nRaw = parseInt(sliderN.value);
                 let side = Math.max(2, Math.round(Math.sqrt(nRaw)));
                 currentN = side * side;
-                var effectiveDensity = density;
+                sliderN.value = currentN;
+                effectiveRhoStar = rhoStarRequested;
+                LStar = Math.sqrt(currentN / effectiveRhoStar);
+                sliderL.value = Math.round(LStar);
+                effectiveDensity = effectiveRhoStar / (sp.sigma * sp.sigma);
             }
 
-            if (effectiveDensity > 0.10) {
-                warningPacking.style.display = 'block';
-            } else {
-                warningPacking.style.display = 'none';
-            }
+            const targetTempK = tempStar * sp.epsOverKb;
+            const side = Math.round(Math.sqrt(currentN));
+
+            valSpecies.textContent = sp.name;
+            valSpecies.style.color = sp.color;
+
+            valN.textContent = `${currentN} (${side}x${side})`;
+            valL.textContent = `${LStar.toFixed(1)} \u03C3`;
+            subL.textContent = `L = ${(LStar * sp.sigma).toFixed(1)} \u00C5`;
+
+            document.getElementById('valDensity').textContent = effectiveRhoStar.toFixed(2);
+            subDensity.textContent = `\u03C1 = ${effectiveDensity.toFixed(3)} \u00C5\u207B\u00B2`;
+
+            document.getElementById('valTemp').textContent = tempStar.toFixed(2);
+            subTemp.textContent = `T = ${targetTempK.toFixed(1)} K \u00B7 T*c \u2248 0.515`;
+
+            updatePhaseBadge(effectiveRhoStar, tempStar);
 
             historyTemp = [];
             historyEnergy = [];
 
-            const side = Math.round(Math.sqrt(currentN));
-            document.getElementById('valN').textContent = `${currentN} (${side}x${side})`;
-            document.getElementById('valDensity').textContent = effectiveDensity.toFixed(3) + " Å⁻²";
-            document.getElementById('valTemp').textContent = temp + " K";
-
-            c_initSim(currentN, effectiveDensity, temp, dt, modeNVT);
+            c_initSim(currentN, effectiveDensity, targetTempK, dt, modeNVT, sp.sigma, sp.epsilon, sp.mass);
         }
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -432,7 +636,10 @@
             graphCanvas = document.getElementById('graphCanvas');
             graphCtx = graphCanvas.getContext('2d');
 
+            selectSpecies = document.getElementById('selectSpecies');
+            valSpecies = document.getElementById('valSpecies');
             sliderN = document.getElementById('sliderN');
+            sliderL = document.getElementById('sliderL');
             sliderDensity = document.getElementById('sliderDensity');
             sliderTemp = document.getElementById('sliderTemp');
             sliderSpeed = document.getElementById('sliderSpeed');
@@ -443,10 +650,48 @@
             btnToggleChart = document.getElementById('btnToggleChart');
             card2Title = document.getElementById('card2Title');
             groupN = document.getElementById('groupN');
-            warningPacking = document.getElementById('warningPacking');
+            groupL = document.getElementById('groupL');
+            valN = document.getElementById('valN');
+            valL = document.getElementById('valL');
+            subL = document.getElementById('subL');
+            phaseBadge = document.getElementById('phaseBadge');
+            phaseIcon = document.getElementById('phaseIcon');
+            phaseText = document.getElementById('phaseText');
+            subDensity = document.getElementById('subDensity');
+            subTemp = document.getElementById('subTemp');
 
-            sliderN.addEventListener('change', startSimulation);
+            selectSpecies.addEventListener('change', () => {
+                currentSpeciesKey = selectSpecies.value;
+                syncParameters('species');
+                startSimulation();
+            });
+
+            sliderL.addEventListener('input', () => {
+                if (fixedBoxView) syncParameters('L');
+            });
+            sliderL.addEventListener('change', () => {
+                if (fixedBoxView) startSimulation();
+            });
+
+            sliderN.addEventListener('input', () => {
+                if (!fixedBoxView) syncParameters('N');
+            });
+            sliderN.addEventListener('change', () => {
+                if (!fixedBoxView) startSimulation();
+            });
+
+            sliderDensity.addEventListener('input', () => {
+                syncParameters('density');
+            });
             sliderDensity.addEventListener('change', startSimulation);
+
+            sliderTemp.addEventListener('input', () => {
+                let tS = parseFloat(sliderTemp.value);
+                let sp = SPECIES[currentSpeciesKey];
+                document.getElementById('valTemp').textContent = tS.toFixed(2);
+                subTemp.textContent = `T = ${(tS * sp.epsOverKb).toFixed(1)} K \u00B7 T*c \u2248 0.515`;
+                updatePhaseBadge(parseFloat(sliderDensity.value), tS);
+            });
             sliderTemp.addEventListener('change', startSimulation);
 
             sliderSpeed.addEventListener('input', () => {
@@ -455,20 +700,21 @@
 
             btnMode.addEventListener('click', () => {
                 modeNVT = modeNVT === 1 ? 0 : 1;
-                btnMode.textContent = modeNVT === 1 ? "Modo: NVT (Termostato)" : "Modo: NVE (Energia Costante)";
+                btnMode.textContent = modeNVT === 1 ? "Modo: NVT (Termostato Berendsen)" : "Modo: NVE (Energia Costante)";
                 startSimulation();
             });
 
             btnViewMode.addEventListener('click', () => {
                 fixedBoxView = !fixedBoxView;
                 updateUIControls();
+                syncParameters('mode');
                 startSimulation();
             });
 
             btnCalcGR.addEventListener('click', () => {
                 if (c_startGrSampling) {
                     c_startGrSampling(10000);
-                    btnCalcGR.textContent = "Calcolo g(r)... 0%";
+                    btnCalcGR.textContent = "Calcolo g(r*)... 0%";
                     activeGraphView = 'gr';
                     updateGraphHeader();
                 }
@@ -486,7 +732,7 @@
             }
         });
 
-        // DISENGO PARTICELLE OTTIMIZZATO AD ALTA VELOCITÀ (Batching 2D Path)
+        // DISEGNO PARTICELLE OTTIMIZZATO AD ALTA VELOCITÀ (Batching 2D Path)
         function drawParticles(posArray, N, L) {
             simCtx.clearRect(0, 0, simCanvas.width, simCanvas.height);
 
@@ -499,10 +745,11 @@
             simCtx.strokeRect(margin, margin, boxPx, boxPx);
 
             const scale = boxPx / L;
-            const rVis = Math.max(1.7 * scale, 2.5);
+            const sp = SPECIES[currentSpeciesKey];
+            const rVis = Math.max((scale * sp.sigma) * 0.35, 1.2);
 
-            // BATCH RENDERING: Un'unica chiamata fill() per tutte le centinaia di particelle
-            simCtx.fillStyle = '#38bdf8';
+            // BATCH RENDERING: Un'unica chiamata fill() con colore dinamico della specie
+            simCtx.fillStyle = sp.color;
             simCtx.beginPath();
 
             for (let i = 0; i < N; i++) {
@@ -521,8 +768,8 @@
             simCtx.fill();
         }
 
-        // DISENGO GRAFICI OTTIMIZZATO SENZA ALLOCAZIONI GARBAGE IN JS
-        function drawRealtimeCharts(targetTemp) {
+        // DISEGNO GRAFICI REALTIME CON GRANDEZZE RIDOTTE (T* ed u*)
+        function drawRealtimeCharts(targetTempStar) {
             graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
 
             const w = graphCanvas.width;
@@ -530,48 +777,69 @@
             const pad = 40;
             const chartH = (h - 3 * pad) / 2;
 
-            // Grafo 1: Temperatura
+            // Grafo 1: Temperatura Ridotta T*
             graphCtx.strokeStyle = '#334155';
             graphCtx.lineWidth = 1;
             graphCtx.strokeRect(pad, pad, w - 2 * pad, chartH);
 
             graphCtx.fillStyle = '#94a3b8';
             graphCtx.font = '11px sans-serif';
-            graphCtx.fillText("Temperatura (K) vs Frame", pad, pad - 8);
+            graphCtx.textAlign = 'left';
+            graphCtx.fillText("Temperatura Ridotta (T* = kB T / \u03B5) vs Frame", pad, pad - 8);
 
             const nPts = historyTemp.length;
-            if (nPts > 1) {
-                const yTarget = pad + chartH - (targetTemp / 400.0) * chartH;
-                graphCtx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
-                graphCtx.setLineDash([4, 4]);
+            const maxTRange = 2.5;
+
+            // Linea critica T*c = 0.515
+            const yTc = pad + chartH - (0.515 / maxTRange) * chartH;
+            if (yTc >= pad && yTc <= pad + chartH) {
+                graphCtx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+                graphCtx.setLineDash([2, 3]);
                 graphCtx.beginPath();
-                graphCtx.moveTo(pad, yTarget);
-                graphCtx.lineTo(w - pad, yTarget);
+                graphCtx.moveTo(pad, yTc);
+                graphCtx.lineTo(w - pad, yTc);
                 graphCtx.stroke();
                 graphCtx.setLineDash([]);
+                graphCtx.fillStyle = 'rgba(245, 158, 11, 0.8)';
+                graphCtx.font = '9px sans-serif';
+                graphCtx.fillText("T*c = 0.515", w - pad - 60, yTc - 3);
+            }
 
-                graphCtx.strokeStyle = '#38bdf8';
+            // Linea Target T*
+            const yTarget = pad + chartH - (targetTempStar / maxTRange) * chartH;
+            graphCtx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+            graphCtx.setLineDash([4, 4]);
+            graphCtx.beginPath();
+            graphCtx.moveTo(pad, yTarget);
+            graphCtx.lineTo(w - pad, yTarget);
+            graphCtx.stroke();
+            graphCtx.setLineDash([]);
+
+            // Curva T*
+            if (nPts > 1) {
+                graphCtx.strokeStyle = SPECIES[currentSpeciesKey].color;
                 graphCtx.lineWidth = 2;
                 graphCtx.beginPath();
                 for (let i = 0; i < nPts; i++) {
                     let x = pad + (i / maxHistory) * (w - 2 * pad);
                     let val = historyTemp[i];
-                    if (val < 0) val = 0; if (val > 400) val = 400;
-                    let y = pad + chartH - (val / 400.0) * chartH;
+                    if (val < 0) val = 0; if (val > maxTRange) val = maxTRange;
+                    let y = pad + chartH - (val / maxTRange) * chartH;
                     if (i === 0) graphCtx.moveTo(x, y);
                     else graphCtx.lineTo(x, y);
                 }
                 graphCtx.stroke();
             }
 
-            // Grafo 2: Energia Totale
+            // Grafo 2: Energia Totale Ridotta per Particella u* = E*/N
             const g2Top = 2 * pad + chartH;
             graphCtx.strokeStyle = '#334155';
             graphCtx.lineWidth = 1;
             graphCtx.strokeRect(pad, g2Top, w - 2 * pad, chartH);
 
             graphCtx.fillStyle = '#94a3b8';
-            graphCtx.fillText("Energia Totale (E₀) vs Frame", pad, g2Top - 8);
+            graphCtx.font = '11px sans-serif';
+            graphCtx.fillText("Energia Ridotta per Atomo (u* = E*/N [\u03B5]) vs Frame", pad, g2Top - 8);
 
             if (nPts > 1) {
                 let minE = historyEnergy[0];
@@ -581,23 +849,42 @@
                     if (e < minE) minE = e;
                     if (e > maxE) maxE = e;
                 }
-                if (maxE === minE) { minE -= 1; maxE += 1; }
+                if (maxE === minE) { minE -= 0.5; maxE += 0.5; }
+                const span = (maxE - minE);
+
+                // Linea di zero se compresa
+                if (minE < 0 && maxE > 0) {
+                    let y0 = g2Top + chartH - ((0 - minE) / span) * chartH;
+                    graphCtx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+                    graphCtx.setLineDash([3, 3]);
+                    graphCtx.beginPath();
+                    graphCtx.moveTo(pad, y0);
+                    graphCtx.lineTo(w - pad, y0);
+                    graphCtx.stroke();
+                    graphCtx.setLineDash([]);
+                }
 
                 graphCtx.strokeStyle = '#4ade80';
                 graphCtx.lineWidth = 2;
                 graphCtx.beginPath();
                 for (let i = 0; i < nPts; i++) {
                     let x = pad + (i / maxHistory) * (w - 2 * pad);
-                    let norm = (historyEnergy[i] - minE) / (maxE - minE);
+                    let norm = (historyEnergy[i] - minE) / span;
                     let y = g2Top + chartH - norm * chartH;
                     if (i === 0) graphCtx.moveTo(x, y);
                     else graphCtx.lineTo(x, y);
                 }
                 graphCtx.stroke();
+
+                // Valore corrente stampato
+                graphCtx.fillStyle = '#4ade80';
+                graphCtx.font = '10px monospace';
+                graphCtx.textAlign = 'right';
+                graphCtx.fillText(`u* = ${historyEnergy[nPts - 1].toFixed(3)} \u03B5`, w - pad - 6, g2Top + 16);
             }
         }
 
-        // DISEGNO GRAFICO FUNZIONE DI CORRELAZIONE g(r)
+        // DISEGNO GRAFICO FUNZIONE DI CORRELAZIONE RIDOTTA g(r*)
         function drawGRChart() {
             graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
 
@@ -609,8 +896,8 @@
                 graphCtx.fillStyle = '#94a3b8';
                 graphCtx.font = '13px sans-serif';
                 graphCtx.textAlign = 'center';
-                graphCtx.fillText("Premi 'Calcola g(r)' nel pannello di controllo", w / 2, h / 2 - 10);
-                graphCtx.fillText("(10.000 step di integrazione ad alta velocità in WASM)", w / 2, h / 2 + 12);
+                graphCtx.fillText("Premi 'Calcola g(r*)' nel pannello di controllo", w / 2, h / 2 - 10);
+                graphCtx.fillText("(10.000 step di campionamento ad alta velocità in C/WASM)", w / 2, h / 2 + 12);
                 return;
             }
 
@@ -639,9 +926,9 @@
             maxVal = Math.ceil(maxVal * 1.1 * 10) / 10;
             if (maxVal < 2.0) maxVal = 2.0;
 
-            const rMax = rArr[nBins - 1];
+            const rMaxStar = rArr[nBins - 1];
 
-            // Grid & Ticks Y (g(r))
+            // Grid & Ticks Y (g(r*))
             graphCtx.font = '10px sans-serif';
             graphCtx.fillStyle = '#94a3b8';
             graphCtx.textAlign = 'right';
@@ -661,7 +948,7 @@
                 graphCtx.fillText(val.toFixed(1), padL - 8, y);
             }
 
-            // Linea riferimento gas ideale g(r) = 1.0
+            // Linea gas ideale g(r*) = 1.0
             const yIdeal = padT + plotH - (1.0 / maxVal) * plotH;
             if (yIdeal >= padT && yIdeal <= padT + plotH) {
                 graphCtx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
@@ -671,14 +958,33 @@
                 graphCtx.lineTo(padL + plotW, yIdeal);
                 graphCtx.stroke();
                 graphCtx.setLineDash([]);
+                graphCtx.fillStyle = 'rgba(239, 68, 68, 0.7)';
+                graphCtx.font = '9px sans-serif';
+                graphCtx.fillText("g(r*) = 1 (Gas Ideale)", padL + plotW - 10, yIdeal - 4);
             }
 
-            // Grid & Ticks X (r in Angstrom)
+            // Linea minima distanza LJ: r* = 2^(1/6) ≈ 1.122
+            const rMinLJ = 1.12246;
+            if (rMinLJ <= rMaxStar) {
+                let xMin = padL + (rMinLJ / rMaxStar) * plotW;
+                graphCtx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+                graphCtx.setLineDash([2, 3]);
+                graphCtx.beginPath();
+                graphCtx.moveTo(xMin, padT);
+                graphCtx.lineTo(xMin, padT + plotH);
+                graphCtx.stroke();
+                graphCtx.setLineDash([]);
+                graphCtx.fillStyle = '#38bdf8';
+                graphCtx.font = '9px sans-serif';
+                graphCtx.fillText("2¹/⁶\u03C3", xMin, padT + 12);
+            }
+
+            // Grid & Ticks X (r* adimensionale)
             graphCtx.textAlign = 'center';
             graphCtx.textBaseline = 'top';
-            const xSteps = 5;
+            const xSteps = Math.min(8, Math.floor(rMaxStar));
             for (let i = 0; i <= xSteps; i++) {
-                let rVal = (rMax / xSteps) * i;
+                let rVal = (rMaxStar / xSteps) * i;
                 let x = padL + (i / xSteps) * plotW;
 
                 graphCtx.strokeStyle = 'rgba(51, 65, 85, 0.4)';
@@ -693,13 +999,13 @@
             // Etichette assi
             graphCtx.fillStyle = '#38bdf8';
             graphCtx.font = '11px sans-serif';
-            graphCtx.fillText("Distanza r (Å)", padL + plotW / 2, padT + plotH + 24);
+            graphCtx.fillText("Distanza Ridotta r* = r/\u03C3", padL + plotW / 2, padT + plotH + 24);
 
             graphCtx.save();
             graphCtx.translate(14, padT + plotH / 2);
             graphCtx.rotate(-Math.PI / 2);
             graphCtx.textAlign = 'center';
-            graphCtx.fillText("g(r)", 0, 0);
+            graphCtx.fillText("g(r*)", 0, 0);
             graphCtx.restore();
 
             // Note stato/progresso
@@ -716,8 +1022,9 @@
                 graphCtx.fillText("Campionamento completato (10.000 step)", padL + plotW, padT - 10);
             }
 
-            // Tracciamento curva g(r)
-            graphCtx.strokeStyle = '#38bdf8';
+            // Tracciamento curva g(r*)
+            const sp = SPECIES[currentSpeciesKey];
+            graphCtx.strokeStyle = sp.color;
             graphCtx.lineWidth = 2.5;
             graphCtx.beginPath();
             let started = false;
@@ -726,7 +1033,7 @@
                 let rVal = rArr[i];
                 let gVal = resArr[i];
 
-                let x = padL + (rVal / rMax) * plotW;
+                let x = padL + (rVal / rMaxStar) * plotW;
                 let y = padT + plotH - (gVal / maxVal) * plotH;
                 if (y < padT) y = padT;
                 if (y > padT + plotH) y = padT + plotH;
@@ -747,7 +1054,13 @@
 
                 let grStatus = c_getGrStatus ? c_getGrStatus() : 0;
                 if (grStatus === 1) {
-                    stepsPerFrame = Math.max(stepsPerFrame, 60);
+                    if (currentN > 2500) {
+                        stepsPerFrame = Math.min(Math.max(stepsPerFrame, 3), 8);
+                    } else if (currentN > 800) {
+                        stepsPerFrame = Math.min(Math.max(stepsPerFrame, 8), 20);
+                    } else {
+                        stepsPerFrame = Math.max(stepsPerFrame, 60);
+                    }
                 }
 
                 c_stepSim(stepsPerFrame);
@@ -757,17 +1070,20 @@
                     const prog = c_getGrProgress();
                     const tgt = c_getGrTarget();
                     const pct = Math.floor((prog / tgt) * 100);
-                    btnCalcGR.textContent = `Calcolo g(r)... ${pct}%`;
+                    btnCalcGR.textContent = `Calcolo g(r*)... ${pct}%`;
                 } else if (grStatus === 2 && btnCalcGR.textContent.startsWith("Calcolo")) {
-                    btnCalcGR.textContent = "Calcola g(r) (10.000 Step)";
+                    btnCalcGR.textContent = "Calcola g(r*) (10.000 Step)";
                     activeGraphView = 'gr';
                     updateGraphHeader();
                 }
 
                 const posPtr = c_getPosPtr();
                 const L = c_getBoxL();
-                const temp = c_getTemp();
-                const eTot = c_getETot();
+                const sp = SPECIES[currentSpeciesKey];
+                const L_star = c_getReducedBoxL ? c_getReducedBoxL() : (L / sp.sigma);
+                const temp_star = c_getReducedTemp ? c_getReducedTemp() : (c_getTemp() / sp.epsOverKb);
+                const temp_K = c_getTemp();
+                const u_star = c_getReducedETot ? c_getReducedETot() : (c_getETot() / (currentN * sp.epsilon));
                 const step = c_getStep();
 
                 if (posPtr && Module.HEAPF64) {
@@ -775,8 +1091,8 @@
                     
                     drawParticles(posArray, currentN, L);
 
-                    historyTemp.push(temp);
-                    historyEnergy.push(eTot);
+                    historyTemp.push(temp_star);
+                    historyEnergy.push(u_star);
                     if (historyTemp.length > maxHistory) {
                         historyTemp.shift();
                         historyEnergy.shift();
@@ -789,9 +1105,9 @@
                     }
 
                     document.getElementById('statStep').textContent = step;
-                    document.getElementById('statBoxL').textContent = L.toFixed(1) + " Å";
-                    document.getElementById('statTemp').textContent = temp.toFixed(1) + " K";
-                    document.getElementById('statEng').textContent = eTot.toFixed(1);
+                    document.getElementById('statBoxL').textContent = `${L_star.toFixed(1)} \u03C3 (${L.toFixed(1)} \u00C5)`;
+                    document.getElementById('statTemp').textContent = `${temp_star.toFixed(2)} (${temp_K.toFixed(0)} K)`;
+                    document.getElementById('statEng').textContent = `${u_star.toFixed(2)} \u03B5`;
                 }
             }
 
