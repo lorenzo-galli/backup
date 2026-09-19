@@ -294,7 +294,6 @@
 
             <!-- Badge Stato Diagramma di Fase 2D -->
             <div class="phase-badge" id="phaseBadge">
-                <span id="phaseIcon">🌊</span>
                 <span id="phaseText">Fluido Supercritico (T* &ge; T*c)</span>
             </div>
 
@@ -360,7 +359,7 @@
 
             <div class="button-group">
                 <button id="btnViewMode" class="secondary">Vista: Box Fisso (L* modificabile, N bloccato)</button>
-                <button id="btnMode" class="secondary">Modo: NVT (Termostato Berendsen)</button>
+                <button id="btnMode" class="secondary">Modo: NVT (Velocity Rescaling)</button>
                 <button id="btnCalcGR" class="secondary">Calcola g(r*) (10.000 Step)</button>
                 <button id="btnRestart">Riavvia Simulazione</button>
             </div>
@@ -390,7 +389,7 @@
         let simCanvas, simCtx, graphCanvas, graphCtx;
         let sliderN, sliderL, sliderDensity, sliderTemp, sliderSpeed, btnRestart, btnMode, btnViewMode, groupN, groupL;
         let selectSpecies, valSpecies, valN, valL, subL;
-        let btnCalcGR, btnToggleChart, card2Title, phaseBadge, phaseIcon, phaseText, subDensity, subTemp;
+        let btnCalcGR, btnToggleChart, card2Title, phaseBadge, phaseText, subDensity, subTemp;
 
         let modeNVT = 1;
         let fixedBoxView = true;
@@ -487,19 +486,16 @@
 
         function updatePhaseBadge(rhoStar, tempStar) {
             if (rhoStar >= 0.80) {
-                
                 phaseText.textContent = "Fase Solida / Cristallina 2D (\u03C1* \u2265 0.80)";
                 phaseBadge.style.color = "#38bdf8";
                 phaseBadge.style.borderColor = "rgba(56, 189, 248, 0.4)";
                 phaseBadge.style.backgroundColor = "rgba(56, 189, 248, 0.15)";
             } else if (tempStar < 0.515 && rhoStar >= 0.15) {
-                
                 phaseText.textContent = "Coesistenza Liquido-Gas (Subcritico, T* < T*c)";
                 phaseBadge.style.color = "#fbbf24";
                 phaseBadge.style.borderColor = "rgba(251, 191, 36, 0.4)";
                 phaseBadge.style.backgroundColor = "rgba(251, 191, 36, 0.15)";
             } else if (rhoStar < 0.15) {
-                
                 phaseText.textContent = "Fase Gas / Vapore Diluito (\u03C1* < 0.15)";
                 phaseBadge.style.color = "#94a3b8";
                 phaseBadge.style.borderColor = "rgba(148, 163, 184, 0.3)";
@@ -510,7 +506,6 @@
                 phaseBadge.style.borderColor = "rgba(52, 211, 153, 0.4)";
                 phaseBadge.style.backgroundColor = "rgba(52, 211, 153, 0.15)";
             } else {
-                
                 phaseText.textContent = "Fluido Supercritico (T* \u2265 T*c \u2248 0.515)";
                 phaseBadge.style.color = "#c084fc";
                 phaseBadge.style.borderColor = "rgba(192, 132, 252, 0.4)";
@@ -654,7 +649,6 @@
             valL = document.getElementById('valL');
             subL = document.getElementById('subL');
             phaseBadge = document.getElementById('phaseBadge');
-            phaseIcon = document.getElementById('phaseIcon');
             phaseText = document.getElementById('phaseText');
             subDensity = document.getElementById('subDensity');
             subTemp = document.getElementById('subTemp');
@@ -699,7 +693,7 @@
 
             btnMode.addEventListener('click', () => {
                 modeNVT = modeNVT === 1 ? 0 : 1;
-                btnMode.textContent = modeNVT === 1 ? "Modo: NVT (Termostato Berendsen)" : "Modo: NVE (Energia Costante)";
+                btnMode.textContent = modeNVT === 1 ? "Modo: NVT (Velocity Rescaling)" : "Modo: NVE (Energia Costante)";
                 startSimulation();
             });
 

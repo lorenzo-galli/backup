@@ -188,18 +188,17 @@ static void compute_energies(System *sys) {
     sys->T_inst = 2.0 * sys->E_kin / (dof * KB);
 }
 
-/* TERMOSTATO DI BERENDSEN */
-static void apply_berendsen_thermostat(System *sys) {
+/* VELOCITY RESCALING */
+static void rescale_velocities(System *sys) {
     if (sys->T_inst > 1.0 && !isnan(sys->T_inst)) {
-        double tau = 0.10; /* Tempo di accoppiamento termico in ps */
-        double lambda2 = 1.0 + (sys->dt / tau) * (sys->T_target / sys->T_inst - 1.0);
-        if (lambda2 < 0.1) lambda2 = 0.1;
-        if (lambda2 > 4.0) lambda2 = 4.0;
-        double lambda = sqrt(lambda2);
+        double factor = sqrt(sys->T_target / sys->T_inst);
+        if (factor < 0.5) factor = 0.5;
+        if (factor > 2.0) factor = 2.0;
         for (int i = 0; i < sys->N; i++) {
-            sys->vel[i].x *= lambda;
-            sys->vel[i].y *= lambda;
+            sys->vel[i].x *= factor;
+            sys->vel[i].y *= factor;
         }
+        compute_energies(sys);
     }
 }
 
@@ -289,7 +288,7 @@ void init_simulation(int N, double density, double target_temp, double dt, int m
     compute_forces_cell(g_sys);
     compute_energies(g_sys);
     
-    /* Pre-equilibrazione fluida con termostato Berendsen */
+    /* Pre-equilibrazione fluida con velocity rescaling */
     double dt_m = g_sys->dt / g_sys->mass;
     for (int eq = 0; eq < 200; eq++) {
         for (int i = 0; i < g_sys->N; i++) {
@@ -311,7 +310,7 @@ void init_simulation(int N, double density, double target_temp, double dt, int m
         }
         
         compute_energies(g_sys);
-        apply_berendsen_thermostat(g_sys);
+        rescale_velocities(g_sys);
     }
     g_gr_active = 0;
     g_gr_target_steps = 0;
@@ -363,8 +362,8 @@ void step_simulation(int num_steps) {
         }
         
         compute_energies(g_sys);
-        if (g_sys->mode_nvt) {
-            apply_berendsen_thermostat(g_sys);
+        if (g_sys->mode_nvt && (g_sys->step % 5 == 0)) {
+            rescale_velocities(g_sys);
         }
         
         if (g_gr_active == 1) {
